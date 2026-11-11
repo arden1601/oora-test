@@ -5,7 +5,7 @@ Read it fully before changing anything.
 
 ## What this project is
 
-A mini **staff portal** for an invented Jakarta skin clinic: who can sign in, and what each person
+A mini **staff portal** for **Abra Skin Clinic**, an invented Jakarta skin clinic: who can sign in, and what each person
 can see and do. It is a take-home test (see `docs/test-brief/`), so it must stay **small, readable
 and tested**. The author has to explain every line live, without AI, and change one part on the
 spot. If a piece of code cannot be explained in a sentence, it is too clever for this repo.

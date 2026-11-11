@@ -1,7 +1,10 @@
-# Staff portal — OORA backend engineer test
+# Abra staff portal
 
-A mini staff portal for an invented Jakarta skin clinic: who can sign in, and what each person
-can see and do. Go + PostgreSQL, with an optional React admin screen.
+**Abra Skin Clinic** — *Your natural shimmer.*
+
+A mini staff portal for Abra, an invented Jakarta skin clinic: who can sign in, and what each
+person can see and do. Built for the OORA backend engineer test; written answers are in
+`docs/answers.md`. Go + PostgreSQL, with an optional React admin screen.
 
 > **Status: scaffold only.** The service starts and answers `GET /healthz`. Sign-in, pages,
 > grants and audit are not built yet. Sections marked _to be written_ are filled in as each part
@@ -32,6 +35,7 @@ make test
 |---|---|
 | `backend/` | Go service, standard library `net/http`, PostgreSQL |
 | `frontend/` | React + Vite + TypeScript, optional admin screen |
+| `docs/answers.md` | the written answers (warm-up, Question 1, Question 3) |
 | `docs/test-brief/` | the test as received |
 | `docs/pdp-checklist.md` | the UU PDP gate every change passes |
 | `AGENTS.md` | the instruction file the AI coding tools worked from |
