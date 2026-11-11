@@ -1,0 +1,19 @@
+# secrets
+.env
+.env.*
+!.env.example
+
+# build output
+/backend/bin/
+/backend/tmp/
+*.test
+*.out
+
+# frontend
+node_modules/
+dist/
+
+# editors and OS
+.idea/
+.vscode/
+.DS_Store

@@ -1,0 +1,33 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-portal}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-local-dev-only}
+      POSTGRES_DB: ${POSTGRES_DB:-portal}
+    ports:
+      - "127.0.0.1:${DB_HOST_PORT:-5433}:5432" # change DB_HOST_PORT in .env if 5433 is taken
+    volumes:
+      - dbdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 2s
+      timeout: 3s
+      retries: 20
+
+  backend:
+    build: ./backend
+    environment:
+      PORT: "8080"
+      DATABASE_URL: postgres://${POSTGRES_USER:-portal}:${POSTGRES_PASSWORD:-local-dev-only}@db:5432/${POSTGRES_DB:-portal}?sslmode=disable
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
+      DEEPSEEK_BASE_URL: ${DEEPSEEK_BASE_URL:-https://api.deepseek.com}
+      DEEPSEEK_MODEL: ${DEEPSEEK_MODEL:-deepseek-flash}
+    ports:
+      - "127.0.0.1:${BACKEND_HOST_PORT:-8080}:8080" # change BACKEND_HOST_PORT in .env if 8080 is taken
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  dbdata:

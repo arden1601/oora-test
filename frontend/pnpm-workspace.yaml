@@ -1,0 +1,4 @@
+# Native build scripts are not run on install. msgpackr-extract is an optional
+# speed-up pulled in by the build tooling; the pure JS fallback is used instead.
+allowBuilds:
+  msgpackr-extract: false
