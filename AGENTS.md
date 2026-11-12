@@ -17,7 +17,8 @@ Law 27/2022) applies to every change. Fake data only.
 
 ```
 backend/                 Go service (standard library net/http) + PostgreSQL
-  cmd/server/            main: wiring only, no business logic
+  cmd/server/            main: wiring only, no business logic; the end-to-end rule tests
+  cmd/hashpw/            prints the stored hash of a password (used for the seed)
   internal/access/       access rules as data + the ONE access decision function
   internal/auth/         sign-in, password hashes, server-side sessions
   internal/grants/       named-person exceptions (give / take away, never delete)
@@ -36,7 +37,7 @@ docs/                    test brief, PDP checklist, written answers
 ```
 cp .env.example .env     # optional; defaults work for local dev
 docker compose up        # the one command: PostgreSQL + backend on :8080
-make test                # all backend tests
+make test                # all backend tests (starts PostgreSQL; tests use schema portal_test)
 make fmt lint            # gofmt + go vet
 cd frontend && pnpm install && pnpm dev    # admin screen on :5173, proxies /api to :8080
 ```
