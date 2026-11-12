@@ -4,11 +4,12 @@
 
 A mini staff portal for Abra, an invented Jakarta skin clinic: who can sign in, and what each
 person can see and do. Built for the OORA backend engineer test; written answers are in
-`docs/answers.md`. Go + PostgreSQL, with an optional React admin screen.
+`docs/answers.md`. Go + PostgreSQL, with an optional React screen (portal and admin).
 
 > **Status.** Built and tested: sign-in and sessions, the five pages, the access rules as
-> data, grants, the audit of refusals, branch scoping, seed data and the admin screen. Designed
-> but not built: 2FA, lockout, exports and the AI assistant (see "What I would build next").
+> data, grants, the audit of refusals, branch scoping across Head Office and ten clinics, seed
+> data (47 people, one per department per branch) and a screen for every account with an admin
+> part for grants. Designed but not built: 2FA, lockout, exports and the AI assistant (see "What I would build next").
 
 ## Run it
 
@@ -43,6 +44,7 @@ curl -b jar -H 'Content-Type: application/json' \
 | Route | What |
 |---|---|
 | `POST /login`, `POST /logout` | sign in with email and password, sign out |
+| `GET /me` | who is signed in, and which pages they may read or enter on |
 | `GET /bookings`, `/patients`, `/medical-record`, `/revenue` | the read pages |
 | `POST /sales-entry` | enter one sale; the answer is the new ID and nothing else |
 | `GET /admin/staff`, `GET /admin/staff/{id}/access` | staff list; one person's access and grant history |
@@ -72,7 +74,7 @@ Go 1.27 and Docker.
 | Path | What |
 |---|---|
 | `backend/` | Go service, standard library `net/http`, PostgreSQL |
-| `frontend/` | React + Vite + TypeScript, optional admin screen |
+| `frontend/` | React + Vite + TypeScript, optional screen: portal for every account, admin part for grants |
 | `docs/answers.md` | the written answers (warm-up, Question 1, Question 3) |
 | `docs/test-brief/` | the test as received |
 | `docs/pdp-checklist.md` | the UU PDP gate every change passes |
@@ -101,7 +103,8 @@ the Go code names a department. Three pieces of data decide access:
 | Doctor | | R | R | | | never |
 | Marketing, HR, Partnerships | | | | | | no |
 
-`R` read, `E` enter only. Management and Growth also have the `/admin` page.
+`R` read, `E` enter only. Management and Growth also have the `/admin` page. Every department
+reads `/me`, the page that tells a person what they may open.
 
 Why these choices:
 
@@ -125,25 +128,45 @@ is reviewed like code. One person is given access with a grant through the admin
 
 ## Sign in as
 
-Twelve fake people, all with the password `abra-demo-2026` (a demo password for fake accounts;
-only its hash is stored).
+47 fake people, all with the password `abra-demo-2026` (a demo password for fake accounts;
+only its hash is stored). There is one person in each department in each branch: seven at Head
+Office, and four in each of the ten clinics.
 
-| Email | Department | Branch |
+Head Office (sees all branches):
+
+| Email | Department |
+|---|---|
+| `management@example.com` | Management |
+| `growth@example.com` | Growth |
+| `finance@example.com` | Finance |
+| `marketing@example.com` | Marketing |
+| `hr@example.com` | HR |
+| `partnerships@example.com` | Partnerships |
+| `crm@example.com` | CRM & Sales |
+
+Clinics (each sees only its own branch). The email is `<role>-<clinic>@example.com`:
+
+| Role in the email | Department |
+|---|---|
+| `clinic-lead` | Clinic Operations |
+| `frontdesk` | Front Desk |
+| `consultant` | Beauty Consultants |
+| `doctor` | Doctor |
+
+| Clinic | In the email | Example |
 |---|---|---|
-| `management@example.com` | Management | Head Office |
-| `growth@example.com` | Growth | Head Office |
-| `finance@example.com` | Finance | Head Office |
-| `marketing@example.com` | Marketing | Head Office |
-| `hr@example.com` | HR | Head Office |
-| `partnerships@example.com` | Partnerships | Head Office |
-| `crm@example.com` | CRM & Sales | Head Office |
-| `clinic-lead@example.com` | Clinic Operations | Abra Kemang |
-| `frontdesk@example.com` | Front Desk | Abra Kemang |
-| `consultant@example.com` | Beauty Consultants | Abra Kemang |
-| `doctor@example.com` | Doctor | Abra Kemang |
-| `frontdesk-menteng@example.com` | Front Desk | Abra Menteng |
+| Abra Kemang | *(none)* | `frontdesk@example.com`, `doctor@example.com` |
+| Abra Menteng | `menteng` | `frontdesk-menteng@example.com` |
+| Abra Senopati | `senopati` | `doctor-senopati@example.com` |
+| Abra Pondok Indah | `pondok-indah` | `clinic-lead-pondok-indah@example.com` |
+| Abra Kelapa Gading | `kelapa-gading` | `consultant-kelapa-gading@example.com` |
+| Abra Pantai Indah Kapuk | `pantai-indah-kapuk` | `frontdesk-pantai-indah-kapuk@example.com` |
+| Abra Puri Indah | `puri-indah` | `doctor-puri-indah@example.com` |
+| Abra Tebet | `tebet` | `frontdesk-tebet@example.com` |
+| Abra Kuningan | `kuningan` | `clinic-lead-kuningan@example.com` |
+| Abra Cempaka Putih | `cempaka-putih` | `consultant-cempaka-putih@example.com` |
 
-Head office sees both clinics; clinic staff see only their own.
+Kemang was the first clinic, so its four people have no clinic name in the email.
 
 ## Assumptions
 
@@ -168,6 +191,13 @@ The brief does not settle these, so they are written down here and used througho
   request, because the staff row is read every time.
 - **A grant to a `never` department is accepted but has no effect.** The decision refuses it
   on every request; the admin API does not second-guess the decision.
+- **`/me` is a page, and every department may read it.** It is a row in the permission table
+  like the rest, so it goes through the same guard: a person who has left is refused there too.
+  Its list of pages is the access decision's own answer for each page. It only helps a screen
+  draw its menu; every page still checks access when it is opened.
+- **One person per department per branch means 47 people.** The brief puts seven departments
+  at head office and four at the clinic, so the seed has seven people at Head Office and four
+  in each of ten clinics. Head-office departments are not repeated in every clinic.
 - **Pages answer in JSON.** The brief asks for "a simple page with fake data"; JSON keeps the
   service small and is what the admin screen reads.
 
@@ -187,19 +217,30 @@ In this order:
 
 ## Optional frontend
 
-Built, plain: `frontend/src/App.tsx`, one file.
+Built, plain: five small files in `frontend/src/`.
 
 ```
 cd frontend && pnpm install && pnpm dev     # http://localhost:5173
 ```
 
-Sign in as `management@example.com` or `growth@example.com`. Pick a person to see what their
-department gives them and every grant with its history. Give one page or "may see money" with
-a reason, take a grant away, or mark the person as having left.
+Any of the 47 accounts can sign in. The screen asks the server `GET /me` and draws one tab for
+each page that person may open: the read pages as a table of the fake data, `/sales-entry` as
+a form that only says "saved". An account with no pages (Marketing, HR, Partnerships) is told
+so.
 
-The screen decides nothing. It calls the admin API, the server's access decision answers, and
-a `403` is shown as a message. Hiding a button is not a control, so there is no admin check in
-the browser at all.
+Management and Growth also get the **`/admin`** tab: filter the staff list by branch and
+department, pick a person, see what their department gives them and every grant with its
+history, give one page or "may see money" with a reason, take a grant away, or mark the person
+as having left.
+
+To watch a grant work: as `management@example.com` give `marketing@example.com` the
+`/bookings` page. Sign in as marketing in another browser (or after signing out) and the tab is
+there. Take the grant away, press "Reload my access", and the tab is gone; opening the page
+anyway answers `403`.
+
+The screen decides nothing. The tabs are the server's answer, every page request is checked
+again by the server, and a `403` is shown as a message. Hiding a button is not a control, so
+there is no access check in the browser at all.
 
 ## How I would run this for real (plan only)
 

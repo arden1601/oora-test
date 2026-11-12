@@ -29,7 +29,7 @@ backend/                 Go service (standard library net/http) + PostgreSQL
   internal/assistant/    AI assistant (DeepSeek); acts only as the signed-in person
   internal/httpx/        middleware and HTTP helpers
   migrations/            SQL migrations and seed
-frontend/                React + Vite + TypeScript (optional admin screen)
+frontend/                React + Vite + TypeScript (optional: portal for every account + admin screen)
 docs/                    test brief, PDP checklist, written answers
 ```
 
@@ -40,7 +40,7 @@ cp .env.example .env     # optional; defaults work for local dev
 docker compose up        # the one command: PostgreSQL + backend on :8080
 make test                # all backend tests (starts PostgreSQL; tests use schema portal_test)
 make fmt lint            # gofmt + go vet
-cd frontend && pnpm install && pnpm dev    # admin screen on :5173, proxies /api to :8080
+cd frontend && pnpm install && pnpm dev    # portal + admin screen on :5173, proxies /api to :8080
 ```
 
 ## Rules the system must always keep
