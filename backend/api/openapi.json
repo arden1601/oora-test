@@ -1,0 +1,1088 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Abra staff portal API",
+    "version": "1.0.0",
+    "description": "A mini staff portal for Abra Skin Clinic (fake data only).\n\n**How to try it here:** run `POST /login` first with one of the seeded accounts. The browser keeps the session cookie, so every later call on this page is made as that person. Run `POST /logout` to switch account.\n\nSeeded accounts all use the password `abra-demo-2026`: `management@example.com`, `growth@example.com`, `finance@example.com`, `marketing@example.com`, `hr@example.com`, `partnerships@example.com`, `crm@example.com`, `clinic-lead@example.com`, `frontdesk@example.com`, `consultant@example.com`, `doctor@example.com`, `frontdesk-menteng@example.com`.\n\nAccess is decided on the server on every request. A refusal is a `403` and one audit row."
+  },
+  "servers": [
+    {
+      "url": "/",
+      "description": "This server"
+    }
+  ],
+  "tags": [
+    {
+      "name": "Sign-in"
+    },
+    {
+      "name": "Pages",
+      "description": "The five pages. Rows are limited to the person's own branch; head office sees all."
+    },
+    {
+      "name": "Admin",
+      "description": "Management and Growth only: grants and staff."
+    },
+    {
+      "name": "Health"
+    }
+  ],
+  "paths": {
+    "/healthz": {
+      "get": {
+        "tags": [
+          "Health"
+        ],
+        "summary": "Is the service up?",
+        "responses": {
+          "200": {
+            "description": "ok",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                },
+                "example": "ok\n"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/login": {
+      "post": {
+        "tags": [
+          "Sign-in"
+        ],
+        "summary": "Sign in with email and password",
+        "description": "Sets the `session` cookie. A wrong email, a wrong password and a person who has left all get the same answer.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Login"
+              },
+              "example": {
+                "email": "frontdesk@example.com",
+                "password": "abra-demo-2026"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "Signed in. The session cookie is set."
+          },
+          "400": {
+            "description": "The body is not valid JSON.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Wrong email or password, or the person has left.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/logout": {
+      "post": {
+        "tags": [
+          "Sign-in"
+        ],
+        "summary": "Sign out",
+        "description": "Deletes the session on the server, so the old cookie stops working at once.",
+        "responses": {
+          "204": {
+            "description": "Signed out."
+          }
+        }
+      }
+    },
+    "/bookings": {
+      "get": {
+        "tags": [
+          "Pages"
+        ],
+        "summary": "Bookings",
+        "description": "Open to CRM & Sales, Clinic Operations, Front Desk, Management and Growth.",
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The rows this person may see.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "page": {
+                      "type": "string"
+                    },
+                    "rows": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Booking"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in, or the session has expired.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Refused by the access decision. One audit row is written.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/patients": {
+      "get": {
+        "tags": [
+          "Pages"
+        ],
+        "summary": "Patient cards",
+        "description": "Open to Clinic Operations, Front Desk, Beauty Consultants, Doctor, Management and Growth. No medical record here.",
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The rows this person may see.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "page": {
+                      "type": "string"
+                    },
+                    "rows": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Patient"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in, or the session has expired.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Refused by the access decision. One audit row is written.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/medical-record": {
+      "get": {
+        "tags": [
+          "Pages"
+        ],
+        "summary": "Medical records",
+        "description": "Open to Doctor, Management and Growth.",
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The rows this person may see.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "page": {
+                      "type": "string"
+                    },
+                    "rows": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/MedicalRecord"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in, or the session has expired.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Refused by the access decision. One audit row is written.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/revenue": {
+      "get": {
+        "tags": [
+          "Pages"
+        ],
+        "summary": "Revenue (the only money page)",
+        "description": "Open to Finance, Management and Growth, and to a named person holding both a page grant and a money grant. Doctors and the Front Desk are always refused.",
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Sales totals per branch.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "page": {
+                      "type": "string"
+                    },
+                    "rows": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/BranchRevenue"
+                      }
+                    },
+                    "total_rupiah": {
+                      "type": "integer",
+                      "format": "int64"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in, or the session has expired.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Refused by the access decision. One audit row is written.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/sales-entry": {
+      "get": {
+        "tags": [
+          "Pages"
+        ],
+        "summary": "Read the sales entry page (refused for everyone)",
+        "description": "No department has `read` on this page, so this is a `403`. It is here to show that entering a sale never lets you read sales back.",
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Only for a person given a `read` grant on this page: the empty form, never sales or totals.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "page": {
+                      "type": "string"
+                    },
+                    "fields": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in, or the session has expired.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Refused by the access decision. One audit row is written.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Pages"
+        ],
+        "summary": "Enter one sale",
+        "description": "Open to Front Desk, Management and Growth. The sale is stored under the person's own branch. The answer holds the new sale's ID and nothing else.",
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NewSale"
+              },
+              "example": {
+                "item": "Facial",
+                "amount_rupiah": 750000
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Stored.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Created"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "An item and a positive whole amount in rupiah are required.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in, or the session has expired.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Refused by the access decision. One audit row is written.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/staff": {
+      "get": {
+        "tags": [
+          "Admin"
+        ],
+        "summary": "List all staff",
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Everyone, with their ID.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "rows": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Staff"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in, or the session has expired.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Refused by the access decision. One audit row is written.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/staff/{id}/access": {
+      "get": {
+        "tags": [
+          "Admin"
+        ],
+        "summary": "One person's access",
+        "description": "What the department gives, and every grant with its history.",
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "An ID, never a name or email."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The person's access.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StaffAccess"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in, or the session has expired.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Refused by the access decision. One audit row is written.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such person.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/staff/{id}/deactivate": {
+      "post": {
+        "tags": [
+          "Admin"
+        ],
+        "summary": "The person has left",
+        "description": "Their very next request is refused, and they cannot sign in again.",
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "An ID, never a name or email."
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Deactivated."
+          },
+          "401": {
+            "description": "Not signed in, or the session has expired.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Refused by the access decision. One audit row is written.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such person.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/grants": {
+      "post": {
+        "tags": [
+          "Admin"
+        ],
+        "summary": "Give one person one page, or \"may see money\"",
+        "description": "Records who gave it, when and why. It works from the person's next request.",
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NewGrant"
+              },
+              "examples": {
+                "page": {
+                  "summary": "One page",
+                  "value": {
+                    "staff_id": "00000000-0000-0000-0000-000000000104",
+                    "kind": "page",
+                    "page": "/bookings",
+                    "mode": "read",
+                    "reason": "Needs the follow-up list for the November campaign"
+                  }
+                },
+                "money": {
+                  "summary": "May see money",
+                  "value": {
+                    "staff_id": "00000000-0000-0000-0000-000000000108",
+                    "kind": "money",
+                    "reason": "Clinic lead reviews Kemang revenue"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Given.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Created"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Missing reason, unknown person or page, or a bad kind or mode.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in, or the session has expired.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Refused by the access decision. One audit row is written.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/grants/{id}": {
+      "delete": {
+        "tags": [
+          "Admin"
+        ],
+        "summary": "Take a grant away",
+        "description": "The row is kept; only who took it away and when are filled in. It stops working from the person's next request.",
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "An ID, never a name or email."
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Taken away."
+          },
+          "401": {
+            "description": "Not signed in, or the session has expired.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Refused by the access decision. One audit row is written.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such active grant.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "sessionCookie": {
+        "type": "apiKey",
+        "in": "cookie",
+        "name": "session",
+        "description": "Set by POST /login. On this page the browser sends it for you."
+      }
+    },
+    "schemas": {
+      "Error": {
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "string",
+            "description": "A short code, never a raw error."
+          }
+        },
+        "example": {
+          "error": "forbidden"
+        }
+      },
+      "Created": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      },
+      "Login": {
+        "type": "object",
+        "required": [
+          "email",
+          "password"
+        ],
+        "properties": {
+          "email": {
+            "type": "string",
+            "format": "email"
+          },
+          "password": {
+            "type": "string",
+            "format": "password"
+          }
+        }
+      },
+      "NewSale": {
+        "type": "object",
+        "required": [
+          "item",
+          "amount_rupiah"
+        ],
+        "properties": {
+          "item": {
+            "type": "string"
+          },
+          "amount_rupiah": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 1,
+            "description": "Whole rupiah."
+          }
+        }
+      },
+      "NewGrant": {
+        "type": "object",
+        "required": [
+          "staff_id",
+          "kind",
+          "reason"
+        ],
+        "properties": {
+          "staff_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "page",
+              "money"
+            ]
+          },
+          "page": {
+            "type": "string",
+            "description": "For kind `page`.",
+            "example": "/bookings"
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "read",
+              "enter"
+            ],
+            "description": "For kind `page`."
+          },
+          "reason": {
+            "type": "string",
+            "description": "Why. Required. Must not contain customer data."
+          }
+        }
+      },
+      "Booking": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "branch": {
+            "type": "string"
+          },
+          "customer": {
+            "type": "string"
+          },
+          "treatment": {
+            "type": "string"
+          },
+          "starts_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "status": {
+            "type": "string"
+          }
+        }
+      },
+      "Patient": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "branch": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "phone": {
+            "type": "string"
+          }
+        }
+      },
+      "MedicalRecord": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "branch": {
+            "type": "string"
+          },
+          "patient": {
+            "type": "string"
+          },
+          "note": {
+            "type": "string"
+          }
+        }
+      },
+      "BranchRevenue": {
+        "type": "object",
+        "properties": {
+          "branch": {
+            "type": "string"
+          },
+          "total_rupiah": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
+      "Staff": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string"
+          },
+          "department": {
+            "type": "string"
+          },
+          "branch": {
+            "type": "string"
+          },
+          "active": {
+            "type": "boolean"
+          }
+        }
+      },
+      "Grant": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "page",
+              "money"
+            ]
+          },
+          "page": {
+            "type": "string"
+          },
+          "mode": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string"
+          },
+          "granted_by": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Staff ID of the admin."
+          },
+          "granted_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "revoked_by": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "revoked_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "StaffAccess": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/Staff"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "money": {
+                "type": "string",
+                "enum": [
+                  "yes",
+                  "no",
+                  "never"
+                ],
+                "description": "The department's money setting."
+              },
+              "department_pages": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "page": {
+                      "type": "string"
+                    },
+                    "mode": {
+                      "type": "string",
+                      "enum": [
+                        "read",
+                        "enter"
+                      ]
+                    }
+                  }
+                }
+              },
+              "grants": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/Grant"
+                }
+              }
+            }
+          }
+        ]
+      }
+    }
+  }
+}

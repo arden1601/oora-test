@@ -21,7 +21,13 @@ docker compose up
 Backend: http://localhost:8080 (`GET /healthz` returns `ok`). The database is created,
 migrated and seeded on the first start.
 
-Try it:
+**API docs you can click:** open http://localhost:8080/docs. It is Swagger UI over
+`backend/api/openapi.json`. Run `POST /login` there first with one of the accounts below; the
+browser keeps the session cookie, so every later "Try it out" call is made as that person.
+Run `POST /logout` to switch account. The page loads Swagger UI from a public CDN, so it needs
+internet access; set `API_DOCS=false` to switch it off.
+
+Or from a terminal:
 
 ```
 # sign in as the Front Desk and keep the session cookie
@@ -59,6 +65,7 @@ Go 1.27 and Docker.
 - `backend/internal/access/decide_test.go`: the decision function, one test per rule.
 - `backend/cmd/server/portal_test.go`: every rule again through the real HTTP routes and a
   real database, including every cell of the permission table.
+- `backend/cmd/server/docs_test.go`: the OpenAPI file and the routes must match, both ways.
 
 ## Layout
 

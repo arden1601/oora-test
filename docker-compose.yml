@@ -21,6 +21,8 @@ services:
     build: ./backend
     environment:
       PORT: "8080"
+      API_DOCS: ${API_DOCS:-true} # Swagger UI at /docs
+      COOKIE_SECURE: ${COOKIE_SECURE:-false}
       DATABASE_URL: postgres://${POSTGRES_USER:-portal}:${POSTGRES_PASSWORD:-local-dev-only}@db:5432/${POSTGRES_DB:-portal}?sslmode=disable
       DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
       DEEPSEEK_BASE_URL: ${DEEPSEEK_BASE_URL:-https://api.deepseek.com}

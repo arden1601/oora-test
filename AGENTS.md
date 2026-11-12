@@ -19,6 +19,7 @@ Law 27/2022) applies to every change. Fake data only.
 backend/                 Go service (standard library net/http) + PostgreSQL
   cmd/server/            main: wiring only, no business logic; the end-to-end rule tests
   cmd/hashpw/            prints the stored hash of a password (used for the seed)
+  api/                   openapi.json + the Swagger UI page served at /docs
   internal/access/       access rules as data + the ONE access decision function
   internal/auth/         sign-in, password hashes, server-side sessions
   internal/grants/       named-person exceptions (give / take away, never delete)
@@ -82,6 +83,7 @@ These are invariants. Each has a test; no change may break one. `M` rules come f
 
 ## Go conventions
 
+- A new or changed route goes into `backend/api/openapi.json` and the route list in `cmd/server/docs_test.go` in the same change; a test fails if they differ.
 - Standard library `net/http` routing (`mux.HandleFunc("GET /bookings", ...)`).
 - `context.Context` first on anything that touches the database.
 - SQL is written by hand with parameters (`$1`), never built by string concatenation.

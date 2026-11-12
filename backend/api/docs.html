@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Abra staff portal API</title>
+    <!-- Swagger UI is loaded from a public CDN, so this page needs internet access.
+         The API description itself (/openapi.json) is served by this service. -->
+    <link rel="stylesheet" href="https://unpkg.com/swagger-ui-dist@5/swagger-ui.css" />
+  </head>
+  <body>
+    <div id="swagger-ui"></div>
+    <script src="https://unpkg.com/swagger-ui-dist@5/swagger-ui-bundle.js"></script>
+    <script>
+      // The page and the API share one origin, so after POST /login the browser
+      // sends the session cookie with every "Try it out" call by itself.
+      window.ui = SwaggerUIBundle({
+        url: '/openapi.json',
+        dom_id: '#swagger-ui',
+        tryItOutEnabled: true,
+      })
+    </script>
+  </body>
+</html>

@@ -11,6 +11,7 @@ import (
 	"os"
 	"time"
 
+	"staffportal/api"
 	"staffportal/internal/access"
 	"staffportal/internal/auth"
 	"staffportal/internal/grants"
@@ -64,6 +65,11 @@ func newMux(db *sql.DB) *http.ServeMux {
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", handleHealthz)
+
+	// API documentation at /docs. Set API_DOCS=false to switch it off in production.
+	if os.Getenv("API_DOCS") != "false" {
+		api.Register(mux)
+	}
 
 	mux.HandleFunc("POST /login", auth.Login(st, secure))
 	mux.HandleFunc("POST /logout", auth.Logout(st, secure))
