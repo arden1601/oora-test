@@ -9,7 +9,8 @@ person can see and do. Built for the OORA backend engineer test; written answers
 > **Status.** Built and tested: sign-in and sessions, the five pages, the access rules as
 > data, grants, the audit of refusals, branch scoping across Head Office and ten clinics, seed
 > data (47 people, one per department per branch) and a screen for every account with an admin
-> part for grants. Designed but not built: 2FA, lockout, exports and the AI assistant (see "What I would build next").
+> part for grants. The plan for running it for real is at the end. Designed but not built:
+> 2FA, lockout, exports and the AI assistant (see "What I would build next").
 
 ## Run it
 
@@ -326,13 +327,95 @@ needs a paid plan for company use (the free plan is non-commercial). Sumopod res
 from other clouds, so the Jakarta region must be chosen at order time.
 
 ### Customer data
-_To be written._
+
+- **Where it lives.** Patient records are rows in PostgreSQL on the Jakarta server, in their
+  own schema (`clinical`). Photos are never in the database and never on a public link: they
+  are encrypted files in private storage (the server disk at test size, object storage in
+  Jakarta at 10 branches), and the service hands one out only after the access decision, by an
+  ID that says nothing about the customer.
+- **Who can read it.** Staff, through the portal only: the permission table decides the page,
+  the branch decides the rows, and the medical record is open to doctors. Every read of a
+  medical record or photo is logged (who, which record ID, when), so "who has seen my record"
+  can be answered inside the law's 3 × 24 hours. Engineers do not read customer data as part
+  of normal work.
+- **Encryption.** HTTPS on every connection. The server disk is encrypted. Medical notes,
+  allergies and photos are encrypted a second time by the service, with a key kept outside the
+  database, so a stolen copy of the database alone shows no health data. Backups are encrypted
+  before they leave the server, with a separate key held by two people.
+- **Backups.** A nightly encrypted copy stored away from the server, kept 30 days; at 10
+  branches, continuous backup that can restore to any minute. Photo storage keeps old versions.
+- **How long it is kept.** Medical records and photos for as long as health regulation
+  requires (25 years after the last visit, to verify), then destroyed. Contact and booking data
+  until two years after the last visit, then erased. A customer's request to erase is done
+  within 3 × 24 hours for everything the law does not make us keep; copies in backups are gone
+  when those backups expire, 30 days later.
 
 ### Company data
-_To be written._
+
+- **Kept apart by schema.** Sales, stock and attendance are in `company`; customers are in
+  `clinical`; staff accounts, the permission table, grants and the audit log are in `access`.
+  A sale points to a customer by ID only. No name and no treatment detail is copied into the
+  ledger, so Finance can reconcile without seeing health data, and a doctor's page never
+  touches a money table.
+- **Kept apart by database role.** The service's role reads and writes rows but cannot change
+  tables, and cannot change or delete audit and grant rows. Migrations run under their own
+  role, used only by the deploy. Finance reporting gets a read-only role that sees `company`
+  and nothing else. The backup job has its own role.
+- **Who can see it.** Revenue and the ledger: Management, Growth, Finance, and people named by
+  a grant. The Front Desk enters sales and reads none. Doctors never see money. Staff records
+  and attendance: HR and Management. The audit log and grants: Management and Growth.
+- **How long it is kept.** Sales records for ten years, as tax law requires (to verify). Staff
+  records for the time of employment plus the legal minimum. Audit and grant rows are never
+  deleted by the service.
+- **Leaving the system.** An export of either kind of data needs the same approval in the team
+  chat and is logged.
 
 ### Running it
-_To be written._
+
+- **How a change reaches production.** A change is a pull request. Tests and lint run
+  automatically, and a person reviews it; AI tools never merge or deploy. After the merge,
+  GitHub Actions builds the image and deploys it over Tailscale, runs the migrations, and
+  checks the health endpoint. If the check fails, the previous image is put back.
+- **Database changes and rollback.** Every migration must work with both the old and the new
+  code: add first, remove in a later release. So rolling back is always "deploy the previous
+  image", never "undo the database". A migration that removes or rewrites data gets a fresh
+  backup taken just before it.
+- **Who may access the servers and the database.** The one or two engineers, each with their
+  own named user and SSH key, only through Tailscale. The database is not reachable from the
+  internet. An engineer's own database role is read-only; write access is a separate role
+  taken for a stated reason, for a limited time, and logged. When someone leaves, the same
+  day: removed from Tailscale (access ends at once), their server user and database role
+  dropped, removed from GitHub, and every shared secret they could read is changed.
+- **Proving a backup restores.** Once a month a scheduled job restores the newest backup into
+  an empty PostgreSQL on a temporary server, compares row counts with production, runs a few
+  known queries, and records how long it took. A failed restore, or a backup older than 26
+  hours, raises an alert. Once a quarter an engineer does it by hand from the written steps.
+- **The booking page is very slow on a busy Saturday: the first hour.**
+  1. *First 10 minutes.* Confirm it and size it: one page or all, one clinic or all. Tell the
+     clinics, who switch to the paper booking sheet. One person leads; changes are written
+     down as they are made.
+  2. *To minute 25.* Look before touching: server CPU, memory and disk; database connections;
+     which queries are running long or waiting on a lock; whether anything was deployed or a
+     heavy job (export, report) started.
+  3. *To minute 40.* Take the least risky fix that matches what was seen: put the previous
+     image back if there was a deploy; stop the heavy job or the one blocking query; add the
+     missing index without locking the table. Restarting the service is the last resort.
+  4. *To minute 60.* Confirm the page is fast again from a clinic, keep watching, tell the
+     clinics. Afterwards: a short written review and the lasting fix.
+  What I would not do: change tables in a hurry, or switch off access checks to make it faster.
 
 ### Getting there
-_To be written._
+
+1. **Finish what guards real data**: the authenticator code and lockout, the separate
+   database roles, and the audit of reads of health data.
+2. **Split the seed.** Today the migrations hold both the access rules and the demo people and
+   customers. Production loads the rules only; real accounts are created by an admin.
+3. **Do the legal work before any real customer is entered**: the impact assessment the PDP
+   law asks for when health data is processed, a named person responsible for data protection,
+   and contracts with every vendor that will hold data.
+4. **Build the server**: the four layers, HTTPS, secrets, backups, and one restore test that
+   passes before go-live.
+5. **Set up the deploy pipeline** and a staging copy that holds only fake data.
+6. **Pilot in one clinic**, with bookings and the Front Desk first, next to the current way of
+   working for two weeks. Then add pages one at a time, reading the audit log every week.
+7. **Before the second branch opens**, move to the larger design in "Two sizes".
