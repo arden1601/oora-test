@@ -103,3 +103,38 @@ td {
   color: #b42318;
   background: #fef3f2;
 }
+
+.signin {
+  max-width: 360px;
+}
+
+.hint,
+.who {
+  color: #475467;
+  font-size: 14px;
+}
+
+.who {
+  margin: 0;
+}
+
+.actions {
+  display: flex;
+  gap: 8px;
+}
+
+.tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 16px 0;
+}
+
+.tabs button.selected {
+  background: #eef4ff;
+}
+
+.staff {
+  max-height: 480px;
+  overflow-y: auto;
+}

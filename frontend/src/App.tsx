@@ -1,142 +1,81 @@
 import { useEffect, useState } from 'react'
 import type { FormEvent } from 'react'
 import './App.css'
+import Admin from './Admin'
+import PageView from './PageView'
+import SalesEntry from './SalesEntry'
+import { api, errorText } from './api'
+import type { Me } from './api'
 
-// The admin screen: see one person's access, give or take away a page or
-// "may see money". It decides nothing itself. Every button calls the server,
-// and the server's access decision answers. A 403 is simply shown.
+// The staff portal screen. Anyone can sign in. The tabs come from the server's
+// answer to GET /me, which is the access decision's own answer for this person.
+// This screen decides nothing: a tab is only a shortcut, and the server checks
+// every page again when it is opened. A 403 is simply shown.
 
-type StaffRow = { id: string; name: string; department: string; branch: string; active: boolean }
-type Grant = {
-  id: string
-  kind: 'page' | 'money'
-  page?: string
-  mode?: string
-  reason: string
-  granted_by: string
-  granted_at: string
-  revoked_at?: string
-}
-type Access = StaffRow & {
-  money: string
-  department_pages: { page: string; mode: string }[]
-  grants: Grant[]
-}
-
-// Only a convenience for the form. The server checks the page exists.
-const PAGES = ['/bookings', '/patients', '/medical-record', '/sales-entry', '/revenue']
-
-// api calls the Go service through the dev proxy and turns a refusal into a message.
-async function api(method: string, path: string, body?: unknown) {
-  const res = await fetch('/api' + path, {
-    method,
-    headers: body ? { 'Content-Type': 'application/json' } : undefined,
-    body: body ? JSON.stringify(body) : undefined,
-  })
-  if (res.status === 401) throw new Error('Please sign in.')
-  if (res.status === 403) throw new Error('The server refused: this account may not do that.')
-  if (!res.ok) {
-    const data = await res.json().catch(() => ({}))
-    throw new Error(data.error ?? `Request failed (${res.status})`)
+// tabsOf turns the /me answer into the tabs to draw.
+function tabsOf(me: Me) {
+  const tabs: string[] = []
+  for (const p of me.pages) {
+    if (p.page === '/me') continue // this screen itself
+    // /sales-entry is a form, so it needs "enter"; every other page is opened with "read".
+    const usable = p.page === '/sales-entry' ? p.enter : p.read
+    if (usable) tabs.push(p.page)
   }
-  return res.status === 204 ? null : res.json()
+  return tabs
 }
 
 function App() {
-  const [signedIn, setSignedIn] = useState(false)
-  const [staff, setStaff] = useState<StaffRow[]>([])
-  const [access, setAccess] = useState<Access | null>(null)
+  const [me, setMe] = useState<Me | null>(null)
+  const [tab, setTab] = useState('')
   const [message, setMessage] = useState('')
 
-  // run wraps every server call so one place shows what went wrong.
-  async function run(action: () => Promise<void>) {
-    setMessage('')
-    try {
-      await action()
-    } catch (err) {
-      setMessage(err instanceof Error ? err.message : 'Something went wrong.')
-    }
+  // showMe keeps the server's answer and picks the tab to open.
+  function showMe(data: Me) {
+    setMe(data)
+    // Keep the open tab if it is still allowed, else open the first one.
+    const tabs = tabsOf(data)
+    setTab((old) => (tabs.includes(old) ? old : (tabs[0] ?? '')))
   }
 
-  const loadStaff = () =>
-    run(async () => {
-      const data = await api('GET', '/admin/staff')
-      setStaff(data.rows)
-      setSignedIn(true)
-    })
+  // loadMe asks the server who is signed in and what they may open.
+  const loadMe = () => api('GET', '/me').then(showMe)
 
-  const loadAccess = (id: string) =>
-    run(async () => setAccess(await api('GET', `/admin/staff/${id}/access`)))
-
-  // On first load, try the staff list: it works if a session cookie is still valid.
+  // On first load, try /me: it works if a session cookie is still valid.
   useEffect(() => {
-    api('GET', '/admin/staff')
-      .then((data) => {
-        setStaff(data.rows)
-        setSignedIn(true)
-      })
-      .catch(() => setSignedIn(false))
+    api('GET', '/me')
+      .then(showMe)
+      .catch(() => setMe(null))
   }, [])
 
   function signIn(e: FormEvent<HTMLFormElement>) {
     e.preventDefault()
     const form = new FormData(e.currentTarget)
-    run(async () => {
-      await api('POST', '/login', { email: form.get('email'), password: form.get('password') })
-      await loadStaff()
-    })
+    setMessage('')
+    api('POST', '/login', { email: form.get('email'), password: form.get('password') })
+      .then(loadMe)
+      .catch((err) => setMessage(err.message === 'Please sign in.' ? 'Wrong email or password.' : errorText(err)))
   }
 
   function signOut() {
-    run(async () => {
-      await api('POST', '/logout')
-      setSignedIn(false)
-      setStaff([])
-      setAccess(null)
+    setMessage('')
+    api('POST', '/logout')
+      .then(() => setMe(null))
+      .catch((err) => setMessage(errorText(err)))
+  }
+
+  function reload() {
+    setMessage('')
+    loadMe().catch((err) => {
+      setMe(null)
+      setMessage(errorText(err))
     })
   }
 
-  function giveGrant(e: FormEvent<HTMLFormElement>) {
-    e.preventDefault()
-    if (!access) return
-    const formEl = e.currentTarget
-    const form = new FormData(formEl)
-    const kind = form.get('kind')
-    run(async () => {
-      await api('POST', '/admin/grants', {
-        staff_id: access.id,
-        kind,
-        page: kind === 'page' ? form.get('page') : '',
-        mode: kind === 'page' ? form.get('mode') : '',
-        reason: form.get('reason'),
-      })
-      formEl.reset()
-      await loadAccess(access.id)
-    })
-  }
-
-  function takeAway(grantId: string) {
-    if (!access) return
-    run(async () => {
-      await api('DELETE', `/admin/grants/${grantId}`)
-      await loadAccess(access.id)
-    })
-  }
-
-  function deactivate() {
-    if (!access) return
-    run(async () => {
-      await api('POST', `/admin/staff/${access.id}/deactivate`)
-      await loadAccess(access.id)
-      await loadStaff()
-    })
-  }
-
-  if (!signedIn) {
+  if (!me) {
     return (
       <main>
-        <h1>Abra staff portal: admin</h1>
-        <form onSubmit={signIn} className="card">
+        <h1>Abra staff portal</h1>
+        <form onSubmit={signIn} className="card signin">
           <label>
             Email
             <input name="email" type="email" required autoComplete="username" />
@@ -148,138 +87,50 @@ function App() {
           <button type="submit">Sign in</button>
         </form>
         {message && <p className="message">{message}</p>}
+        <p className="hint">The demo accounts and their password are listed in the README.</p>
       </main>
     )
   }
 
+  const tabs = tabsOf(me)
+
   return (
     <main>
       <header>
-        <h1>Abra staff portal: admin</h1>
-        <button type="button" onClick={signOut}>
-          Sign out
-        </button>
+        <div>
+          <h1>Abra staff portal</h1>
+          <p className="who">
+            {me.name}: {me.department}, {me.branch}.{' '}
+            {me.head_office ? 'Sees all branches.' : 'Sees this branch only.'}
+          </p>
+        </div>
+        <div className="actions">
+          <button type="button" onClick={reload}>
+            Reload my access
+          </button>
+          <button type="button" onClick={signOut}>
+            Sign out
+          </button>
+        </div>
       </header>
       {message && <p className="message">{message}</p>}
 
-      <div className="columns">
-        <section className="card">
-          <h2>Staff</h2>
-          <ul className="staff">
-            {staff.map((s) => (
-              <li key={s.id}>
-                <button
-                  type="button"
-                  className={access?.id === s.id ? 'selected' : ''}
-                  onClick={() => loadAccess(s.id)}
-                >
-                  {s.name}
-                  <small>
-                    {s.department}, {s.branch}
-                    {s.active ? '' : ' (left)'}
-                  </small>
-                </button>
-              </li>
-            ))}
-          </ul>
-        </section>
+      {tabs.length === 0 ? (
+        <p className="card">This account has no pages. An admin can give it one.</p>
+      ) : (
+        <nav className="tabs">
+          {tabs.map((t) => (
+            <button key={t} type="button" className={t === tab ? 'selected' : ''} onClick={() => setTab(t)}>
+              {t}
+            </button>
+          ))}
+        </nav>
+      )}
 
-        {access && (
-          <section className="card">
-            <h2>{access.name}</h2>
-            <p>
-              {access.department}, {access.branch}. Money setting: <b>{access.money}</b>.{' '}
-              {access.active ? 'Active.' : 'Has left: every request is refused.'}
-            </p>
-
-            <h3>From the department</h3>
-            {access.department_pages.length === 0 ? (
-              <p>No pages.</p>
-            ) : (
-              <ul>
-                {access.department_pages.map((p) => (
-                  <li key={p.page + p.mode}>
-                    <code>{p.page}</code> ({p.mode})
-                  </li>
-                ))}
-              </ul>
-            )}
-
-            <h3>Grants to this person</h3>
-            {access.grants.length === 0 ? (
-              <p>None.</p>
-            ) : (
-              <table>
-                <thead>
-                  <tr>
-                    <th>What</th>
-                    <th>Why</th>
-                    <th>Given</th>
-                    <th>Status</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {access.grants.map((g) => (
-                    <tr key={g.id}>
-                      <td>{g.kind === 'money' ? 'May see money' : `${g.page} (${g.mode})`}</td>
-                      <td>{g.reason}</td>
-                      <td>{new Date(g.granted_at).toLocaleString()}</td>
-                      <td>
-                        {g.revoked_at ? (
-                          `Taken away ${new Date(g.revoked_at).toLocaleString()}`
-                        ) : (
-                          <button type="button" onClick={() => takeAway(g.id)}>
-                            Take away
-                          </button>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
-
-            <h3>Give access</h3>
-            <form onSubmit={giveGrant} className="grant">
-              <label>
-                What
-                <select name="kind" defaultValue="page">
-                  <option value="page">One page</option>
-                  <option value="money">May see money</option>
-                </select>
-              </label>
-              <label>
-                Page (for "one page")
-                <select name="page">
-                  {PAGES.map((p) => (
-                    <option key={p}>{p}</option>
-                  ))}
-                </select>
-              </label>
-              <label>
-                Mode
-                <select name="mode">
-                  <option value="read">read</option>
-                  <option value="enter">enter</option>
-                </select>
-              </label>
-              <label>
-                Why (required)
-                <input name="reason" required />
-              </label>
-              <button type="submit">Give</button>
-            </form>
-
-            {access.active && (
-              <p>
-                <button type="button" className="danger" onClick={deactivate}>
-                  This person has left
-                </button>
-              </p>
-            )}
-          </section>
-        )}
-      </div>
+      {/* key={tab} starts each page fresh, so nothing of one page is left on the next. */}
+      {tab === '/admin' && <Admin key={tab} pages={me.pages.map((p) => p.page).filter((p) => p !== '/me')} />}
+      {tab === '/sales-entry' && <SalesEntry key={tab} />}
+      {tab !== '' && tab !== '/admin' && tab !== '/sales-entry' && <PageView key={tab} path={tab} />}
     </main>
   )
 }
