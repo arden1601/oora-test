@@ -37,7 +37,9 @@ const (
 	doctor      = "doctor@example.com"
 	frontDeskM  = "frontdesk-menteng@example.com"
 	kemangTotal = 2_250_000
-	allTotal    = 3_150_000
+	// Kemang 2,250,000 + Menteng 900,000 + 500,000 in each of the 8 other clinics.
+	allTotal    = 7_150_000
+	allBookings = 12 // 2 in Kemang, 2 in Menteng, 1 in each of the 8 other clinics
 )
 
 // ---- Sign-in ----
@@ -290,8 +292,15 @@ func TestBranchStaffSeeOnlyTheirOwnBranch(t *testing.T) { // T3
 func TestHeadOfficeSeesAllBranches(t *testing.T) { // T3
 	p := newPortal(t)
 	rows := p.rows(p.get(p.login(crm), "/bookings"))
-	if len(rows) != 4 {
-		t.Fatalf("head office sees %d bookings, want all 4", len(rows))
+	if len(rows) != allBookings {
+		t.Fatalf("head office sees %d bookings, want all %d", len(rows), allBookings)
+	}
+	branches := map[any]bool{}
+	for _, row := range rows {
+		branches[row["branch"]] = true
+	}
+	if len(branches) != 10 {
+		t.Fatalf("head office sees bookings of %d clinics, want all 10", len(branches))
 	}
 }
 
@@ -306,6 +315,169 @@ func TestRevenueTotalsFollowTheBranch(t *testing.T) { // T3, M3
 	p.grantMoney(admin, clinicLead)
 	if got := p.total(p.get(p.login(clinicLead), "/revenue")); got != kemangTotal {
 		t.Fatalf("Kemang clinic lead sees total %d, want only Kemang's %d", got, kemangTotal)
+	}
+}
+
+// ---- Ten branches ----
+
+func TestSeedHasTenClinicsAndOneHeadOffice(t *testing.T) { // T3
+	p := newPortal(t)
+	var clinics, headOffices int
+	p.queryRow2(&clinics, &headOffices, `
+		SELECT count(*) FILTER (WHERE NOT is_head_office), count(*) FILTER (WHERE is_head_office)
+		FROM branches`)
+	if clinics != 10 || headOffices != 1 {
+		t.Fatalf("got %d clinics and %d head offices, want 10 and 1", clinics, headOffices)
+	}
+}
+
+func TestEveryClinicHasOnePersonInEachClinicDepartment(t *testing.T) {
+	p := newPortal(t)
+	// Every clinic must hold exactly one person in each of the four clinic departments.
+	var wrong int
+	p.queryRow(&wrong, `
+		SELECT count(*)
+		FROM branches b
+		CROSS JOIN (VALUES ('clinic_ops'), ('front_desk'), ('consultants'), ('doctor')) AS d (id)
+		WHERE NOT b.is_head_office
+		  AND (SELECT count(*) FROM staff s
+		       WHERE s.branch_id = b.id AND s.department_id = d.id) <> 1`)
+	if wrong != 0 {
+		t.Fatalf("%d clinic/department pairs do not have exactly one person", wrong)
+	}
+	var clinicStaff int
+	p.queryRow(&clinicStaff, `
+		SELECT count(*) FROM staff s JOIN branches b ON b.id = s.branch_id WHERE NOT b.is_head_office`)
+	if clinicStaff != 40 {
+		t.Fatalf("got %d clinic staff, want 40 (4 in each of 10 clinics)", clinicStaff)
+	}
+}
+
+func TestHeadOfficeHasOnePersonInEachHeadOfficeDepartment(t *testing.T) {
+	p := newPortal(t)
+	var people, departments int
+	p.queryRow2(&people, &departments, `
+		SELECT count(*), count(DISTINCT s.department_id)
+		FROM staff s JOIN branches b ON b.id = s.branch_id WHERE b.is_head_office`)
+	if people != 7 || departments != 7 {
+		t.Fatalf("head office has %d people in %d departments, want 7 in 7", people, departments)
+	}
+}
+
+func TestEveryClinicFrontDeskSeesOnlyItsOwnBranch(t *testing.T) { // T3
+	p := newPortal(t)
+	rows, err := p.db.Query(`
+		SELECT s.email, b.name FROM staff s JOIN branches b ON b.id = s.branch_id
+		WHERE s.department_id = 'front_desk' ORDER BY b.name`)
+	if err != nil {
+		t.Fatalf("query: %v", err)
+	}
+	desks := map[string]string{} // email -> branch name
+	for rows.Next() {
+		var email, branch string
+		if err := rows.Scan(&email, &branch); err != nil {
+			t.Fatalf("scan: %v", err)
+		}
+		desks[email] = branch
+	}
+	rows.Close()
+	if len(desks) != 10 {
+		t.Fatalf("got %d front desks, want one in each of 10 clinics", len(desks))
+	}
+
+	for email, branch := range desks {
+		c := p.login(email)
+		for _, page := range []string{"/patients", "/bookings"} {
+			got := p.rows(p.get(c, page))
+			if len(got) == 0 {
+				t.Errorf("%s sees nothing on %s, want the rows of %s", email, page, branch)
+			}
+			for _, row := range got {
+				if row["branch"] != branch {
+					t.Errorf("%s (%s) sees a %s row of %v", email, branch, page, row["branch"])
+				}
+			}
+		}
+	}
+}
+
+// ---- /me: what the signed-in person may open ----
+
+func TestMeListsWhatThePersonMayOpen(t *testing.T) { // T1, T2
+	p := newPortal(t)
+	me := p.me(p.login(frontDesk))
+	if me.Department != "Front Desk" || me.Branch != "Abra Kemang" || me.HeadOffice {
+		t.Fatalf("who: %+v", me)
+	}
+	want := map[string][2]bool{ // page -> {read, enter}
+		"/bookings":       {true, false},
+		"/patients":       {true, false},
+		"/medical-record": {false, false},
+		"/sales-entry":    {false, true},
+		"/revenue":        {false, false},
+		"/admin":          {false, false},
+		"/me":             {true, false},
+	}
+	if len(me.Pages) != len(want) {
+		t.Fatalf("got %d pages, want %d", len(me.Pages), len(want))
+	}
+	for _, pg := range me.Pages {
+		if w, ok := want[pg.Page]; !ok || pg.Read != w[0] || pg.Enter != w[1] {
+			t.Errorf("%s: read=%v enter=%v, want %v", pg.Page, pg.Read, pg.Enter, w)
+		}
+	}
+}
+
+func TestMeChangesOnTheNextRequestAfterGrantAndRevoke(t *testing.T) { // M5, T4
+	p := newPortal(t)
+	admin := p.login(management)
+	m := p.login(marketing)
+	if p.me(m).mayRead("/bookings") {
+		t.Fatal("before the grant: /me offers /bookings to marketing")
+	}
+	id := p.grantPage(admin, marketing, "/bookings", "read")
+	if !p.me(m).mayRead("/bookings") {
+		t.Fatal("after the grant: /me does not offer /bookings")
+	}
+	p.do(admin, "DELETE", "/admin/grants/"+id, nil)
+	if p.me(m).mayRead("/bookings") {
+		t.Fatal("after the revoke: /me still offers /bookings")
+	}
+}
+
+func TestMeNeverOffersRevenueToADoctorEvenWithGrants(t *testing.T) { // M2
+	p := newPortal(t)
+	admin := p.login(management)
+	p.grantPage(admin, doctor, "/revenue", "read")
+	p.grantMoney(admin, doctor)
+	if p.me(p.login(doctor)).mayRead("/revenue") {
+		t.Fatal("/me offers /revenue to a doctor")
+	}
+}
+
+func TestMeIsRefusedForADeactivatedPerson(t *testing.T) { // T4
+	p := newPortal(t)
+	fd := p.login(frontDesk)
+	p.post(p.login(management), "/admin/staff/"+p.staffID(frontDesk)+"/deactivate", nil)
+	if rec := p.get(fd, "/me"); rec.Code != http.StatusForbidden {
+		t.Fatalf("got %d, want 403", rec.Code)
+	}
+}
+
+func TestMeWithoutASessionIs401(t *testing.T) { // T1
+	p := newPortal(t)
+	if rec := p.get(nil, "/me"); rec.Code != http.StatusUnauthorized {
+		t.Fatalf("got %d, want 401", rec.Code)
+	}
+}
+
+func TestMeWritesNoAuditRows(t *testing.T) { // T1: a list of pages is not a refused access
+	p := newPortal(t)
+	p.me(p.login(doctor))
+	var n int
+	p.queryRow(&n, `SELECT count(*) FROM audit_log`)
+	if n != 0 {
+		t.Fatalf("got %d audit rows, want 0", n)
 	}
 }
 
@@ -600,6 +772,41 @@ func (p *portal) grant(admin *http.Cookie, body map[string]string) string {
 		p.t.Fatalf("create grant: bad response %q", rec.Body)
 	}
 	return out.ID
+}
+
+// meAnswer is the body of GET /me.
+type meAnswer struct {
+	Name       string `json:"name"`
+	Department string `json:"department"`
+	Branch     string `json:"branch"`
+	HeadOffice bool   `json:"head_office"`
+	Pages      []struct {
+		Page  string `json:"page"`
+		Read  bool   `json:"read"`
+		Enter bool   `json:"enter"`
+	} `json:"pages"`
+}
+
+func (m meAnswer) mayRead(page string) bool {
+	for _, pg := range m.Pages {
+		if pg.Page == page {
+			return pg.Read
+		}
+	}
+	return false
+}
+
+func (p *portal) me(c *http.Cookie) meAnswer {
+	p.t.Helper()
+	rec := p.get(c, "/me")
+	if rec.Code != http.StatusOK {
+		p.t.Fatalf("GET /me: got %d, want 200", rec.Code)
+	}
+	var out meAnswer
+	if err := json.Unmarshal(rec.Body.Bytes(), &out); err != nil {
+		p.t.Fatalf("GET /me: response is not JSON: %v", err)
+	}
+	return out
 }
 
 func (p *portal) rows(rec *httptest.ResponseRecorder) []map[string]any {

@@ -1,6 +1,7 @@
 package httpx
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"log/slog"
@@ -48,13 +49,12 @@ func (g *Guard) Page(page string, action access.Action, next PageHandler) http.H
 		}
 
 		// May they? The decision itself lives in internal/access and nowhere else.
-		facts, err := g.Store.Facts(ctx, person, page, action)
+		decision, err := g.decide(ctx, person, page, action)
 		if err != nil {
 			slog.Error("load access facts failed", "error", err)
 			WriteError(w, http.StatusInternalServerError, "internal_error")
 			return
 		}
-		decision := access.Decide(facts)
 		if !decision.Allowed {
 			audit.Refused(ctx, g.Store, person.ID, page, string(action), decision.Reason)
 			WriteError(w, http.StatusForbidden, "forbidden")
@@ -62,6 +62,66 @@ func (g *Guard) Page(page string, action access.Action, next PageHandler) http.H
 		}
 
 		next(w, r, person)
+	}
+}
+
+// decide loads the facts for one person, page and action fresh from the database
+// and asks the access decision. Page and Me both go through here.
+func (g *Guard) decide(ctx context.Context, p store.Person, page string, action access.Action) (access.Decision, error) {
+	facts, err := g.Store.Facts(ctx, p, page, action)
+	if err != nil {
+		return access.Decision{}, err
+	}
+	return access.Decide(facts), nil
+}
+
+// MyPage is one page in the answer of GET /me: may this person read it, enter on it.
+type MyPage struct {
+	Page       string `json:"page"`
+	ShowsMoney bool   `json:"shows_money"`
+	Read       bool   `json:"read"`
+	Enter      bool   `json:"enter"`
+}
+
+// Me handles GET /me: who the signed-in person is and which pages they may open.
+// Each line is the access decision's own answer for that page, asked now, so a
+// grant given or taken away shows on the next request (T4). The list only helps a
+// screen draw its menu: every page request is still checked by Page. Nothing is
+// audited here, because nothing was refused.
+func (g *Guard) Me() PageHandler {
+	return func(w http.ResponseWriter, r *http.Request, p store.Person) {
+		ctx := r.Context()
+		pages, err := g.Store.ListPages(ctx)
+		if err != nil {
+			slog.Error("list pages failed", "error", err)
+			WriteError(w, http.StatusInternalServerError, "internal_error")
+			return
+		}
+		mine := []MyPage{}
+		for _, pg := range pages {
+			read, err := g.decide(ctx, p, pg.Path, access.ActionRead)
+			if err != nil {
+				slog.Error("load access facts failed", "error", err)
+				WriteError(w, http.StatusInternalServerError, "internal_error")
+				return
+			}
+			enter, err := g.decide(ctx, p, pg.Path, access.ActionEnter)
+			if err != nil {
+				slog.Error("load access facts failed", "error", err)
+				WriteError(w, http.StatusInternalServerError, "internal_error")
+				return
+			}
+			mine = append(mine, MyPage{
+				Page: pg.Path, ShowsMoney: pg.ShowsMoney, Read: read.Allowed, Enter: enter.Allowed,
+			})
+		}
+		WriteJSON(w, http.StatusOK, map[string]any{
+			"name":        p.Name,
+			"department":  p.DepartmentName,
+			"branch":      p.BranchName,
+			"head_office": p.HeadOffice,
+			"pages":       mine,
+		})
 	}
 }
 

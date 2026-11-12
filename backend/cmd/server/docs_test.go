@@ -17,6 +17,7 @@ var servedRoutes = []string{
 	"GET /healthz",
 	"POST /login",
 	"POST /logout",
+	"GET /me",
 	"GET /bookings",
 	"GET /patients",
 	"GET /medical-record",

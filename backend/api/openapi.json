@@ -111,6 +111,52 @@
         }
       }
     },
+    "/me": {
+      "get": {
+        "tags": [
+          "Sign-in"
+        ],
+        "summary": "Who am I, and what may I open",
+        "description": "The signed-in person and, for every page, whether they may read it or enter on it. Each answer comes from the same access decision that guards the pages, asked at the time of the request. It only helps a screen draw its menu: every page still checks access itself. Open to every department.",
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The person and their pages.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Me"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in, or the session has expired.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Refused by the access decision (for example the person has left). One audit row is written.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/bookings": {
       "get": {
         "tags": [
@@ -1082,6 +1128,47 @@
             }
           }
         ]
+      },
+      "Me": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "department": {
+            "type": "string"
+          },
+          "branch": {
+            "type": "string"
+          },
+          "head_office": {
+            "type": "boolean",
+            "description": "Head office sees all branches."
+          },
+          "pages": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "page": {
+                  "type": "string",
+                  "example": "/bookings"
+                },
+                "shows_money": {
+                  "type": "boolean"
+                },
+                "read": {
+                  "type": "boolean",
+                  "description": "May open the page."
+                },
+                "enter": {
+                  "type": "boolean",
+                  "description": "May submit to the page."
+                }
+              }
+            }
+          }
+        }
       }
     }
   }

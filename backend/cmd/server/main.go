@@ -74,6 +74,9 @@ func newMux(db *sql.DB) *http.ServeMux {
 	mux.HandleFunc("POST /login", auth.Login(st, secure))
 	mux.HandleFunc("POST /logout", auth.Logout(st, secure))
 
+	// Who am I, and which pages may I open? A page like the others, behind the guard.
+	mux.HandleFunc("GET /me", guard.Page("/me", read, guard.Me()))
+
 	// The five pages.
 	mux.HandleFunc("GET /bookings", guard.Page("/bookings", read, pages.Bookings(st)))
 	mux.HandleFunc("GET /patients", guard.Page("/patients", read, pages.Patients(st)))

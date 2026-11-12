@@ -18,10 +18,12 @@ const (
 // Person is the signed-in member of staff, read fresh from the database on every request.
 type Person struct {
 	ID             string
+	Name           string
 	DepartmentID   string
 	DepartmentName string
 	Money          access.Money // the department's money setting
 	BranchID       string
+	BranchName     string
 	HeadOffice     bool
 	Active         bool
 }
@@ -98,12 +100,13 @@ func (s *Store) PersonBySession(ctx context.Context, tokenHash string) (Person, 
 
 	var p Person
 	err = s.db.QueryRowContext(ctx, `
-		SELECT s.id, s.is_active, d.id, d.name, d.money, b.id, b.is_head_office
+		SELECT s.id, s.display_name, s.is_active, d.id, d.name, d.money, b.id, b.name, b.is_head_office
 		FROM staff s
 		JOIN departments d ON d.id = s.department_id
 		JOIN branches b ON b.id = s.branch_id
 		WHERE s.id = $1`, staffID).
-		Scan(&p.ID, &p.Active, &p.DepartmentID, &p.DepartmentName, &p.Money, &p.BranchID, &p.HeadOffice)
+		Scan(&p.ID, &p.Name, &p.Active, &p.DepartmentID, &p.DepartmentName, &p.Money,
+			&p.BranchID, &p.BranchName, &p.HeadOffice)
 	if err != nil {
 		return Person{}, fmt.Errorf("load staff: %w", err)
 	}
@@ -133,6 +136,34 @@ func (s *Store) Facts(ctx context.Context, p Person, page string, action access.
 	// An unknown page is treated as a money page: the safer of the two answers.
 	f.ShowsMoney = !showsMoney.Valid || showsMoney.Bool
 	return f, nil
+}
+
+// Page is one row of the pages table.
+type Page struct {
+	Path       string
+	ShowsMoney bool
+}
+
+// ListPages lists every page the portal knows, in path order.
+func (s *Store) ListPages(ctx context.Context) ([]Page, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT path, shows_money FROM pages ORDER BY path`)
+	if err != nil {
+		return nil, fmt.Errorf("list pages: %w", err)
+	}
+	defer rows.Close()
+
+	out := []Page{}
+	for rows.Next() {
+		var pg Page
+		if err := rows.Scan(&pg.Path, &pg.ShowsMoney); err != nil {
+			return nil, fmt.Errorf("read page: %w", err)
+		}
+		out = append(out, pg)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("list pages: %w", err)
+	}
+	return out, nil
 }
 
 // InsertAudit records one refused access. staffID is empty when nobody was signed in.
